@@ -19,6 +19,11 @@
 ##  this saves the data into a single table update the table it should save into in the tablename variable below
 ##  this uses a DSN to connect to the database. update the name of the dsn below. FOR the WTP you shouldn't change it.
 ##  this uploads all files in this directory matching a filename pattern. update that pattern in rawfilename below
+##
+##
+##  ERROR CODES:
+##  2 - argument error probably
+##  3 - changing working dir did not work
 ##########################
 
 
@@ -31,33 +36,47 @@ import pypyodbc as db # used to connect to database
 import shutil # used  to move files to saved directory to mark them as saved
 import sys #used to log errors 
 import time # used to generate log names
+from os import chdir, getcwd,listdir
 
-#
-#   LOGS
-#       Redirect stdout to the logfile. as this is usually going to be run by a scheduled task. 
-
-logname = time.asctime().replace(' ','_').replace(':',".") # name it after the current time
-sys.stdout = open('diag/{}.txt'.format(logname, 'w'))   # save the log
 
 
 #
 #   ARGUMENTS
 #
 
-argparsaser = argparse.ArgumentParser(description = 'Uploads inquisit datafiles to tables in wtp_data')
-p.add_argument('-t','--table', required=True)
-p.add_argument('-f','--file_pattern',required=True)
-p.add_argument('-d','--dsn',required=False, default='wtp_data')
+argparser = argparse.ArgumentParser(description = 'Uploads inquisit datafiles to tables in wtp_data')
+argparser.add_argument('-t','--table', required=True)
+argparser.add_argument('-f','--file_pattern',required=True)
+argparser.add_argument('-p','--path_to_working_dir',required=True)
+argparser.add_argument('-d','--dsn',required=False, default='wtp_data')
 
-args = vars(p.parse_args())
+args = vars(argparser.parse_args()) # get the arguments from argparse
 
 tablename = args['table']
 rawfile_name = args['file_pattern']
 dsn = args['dsn']
+working_dir = args['path_to_working_dir']
+
+
+try:
+    print('starting at:' + getcwd())
+    print( 'attempting to move to ' + working_dir)
+    chdir(working_dir)
+    print('now at: ' + getcwd())
+    print('contains: ' + '\n'.join(listdir()))
+except Exception as e:
+    print('moving to workingdir did not work error -> ', e)
+    sys.exit(3)
+
+#
+#   LOGS
+#       Redirect stdout to the logfile. as this is usually going to be run by a scheduled task. 
+
+logname = time.asctime().replace(' ','_').replace(':',".") # name it after the current time
+sys.stdout = open('diag/{}.txt'.format(logname), 'w')   # save the log
+
 
 print('PROVIDED ARGS: {}'.format(args))
-
-
 
 #
 #   DATABASE CONNECTION
@@ -86,19 +105,28 @@ print('Found these datafiles. Trying to upload them.\n{}'.format(datfiles))
 #
 #   Processing datafiles
 #
-
-failed_files = [] # container for files that were not uploaded successfully
-for f in datfiles:
-    file_inserted_without_errors = True # if anything goes wrong flip this. but default to true 
+saved_files = []
+error_list = [] # container for files that were not uploaded successfully
+for f_i,f in enumerate(datfiles):
     try:
-        print('===================\n\tprocessing data file {}\n===================\n'.format(f))
+        file_inserted_without_errors = True # if anything goes wrong flip this. but default to true 
+        print('===================\tprocessing data file {}/{}\t==================='.format(f_i, len(datfiles)))
+        print('========\t{}\t========\n'.format(f))
         fo = open(f,'r')
         r = csv.reader(fo, delimiter='\t')
         l = [line for line in r]
         fo.close() # close the file object. it's been read in already 
-        
+      
+
+        #
+        #   GO THROUGH ROWS
+        #
+
+        errors_occured_in_file = [] # container to hold errors as they occur. We'll summarize them at the end of the file. 
+            #   to be filled with tuples (row, error string)
         for i,line in enumerate(l[1:]): # iterate through each row
-            sys.stdout.flush()
+            sys.stdout.flush() # refresh the log.
+
             # encapsulate strings with quotes
             for j,v in enumerate(line): 
                 if coltypes[j] is str: 
@@ -108,7 +136,7 @@ for f in datfiles:
             statement = 'INSERT INTO {} SET '.format(tablename)
             for j in range(len(line)):
                 statement += '{} = {}, '.format(colnames[j], line[j])
-            statement = statement[:-2] +  ';'
+            statement = statement[:-2] +  ';' # remove ', ' from the end of the string
 
 
             # insert the row
@@ -120,28 +148,41 @@ for f in datfiles:
                 #print('inserted row {}/{} of file {} __successfully__'.format(i,len(l)-2,f))
 
             except Exception as e:
-                print('\n__error__ inserting row {}/{} into table {}. from file: {}\n\terror: {}'.format(i,len(l)-2,tablename,f,e))
-                print(statement + '\n\n')
+                print('\n__error__ inserting row {}/{} into table {}. \terror: {}'.format(i,len(l)-2,f,e))
+                print(statement + '\n')
                 file_inserted_without_errors = False # set flag to say it was completed with errors
-        # after inserting file.
+                errors_occured_in_file.append((f, 'ERROR WHILE INSERTING ROW' , e))
+        
+        #
+        # IF NO ERRORS MOVE TO SAVED DIRECTORY
+        #
         if file_inserted_without_errors:
             # then move datafile into the saved directory.
             try:
                 shutil.move(f, 'saved/{}'.format(f))
                 print('NO ERRORS.')
+                saved_files.append(f)
             except Exception as e:
                 print('__Error__ moving the datafile to the saved directory. Error:{}'.format(e))
-        else: # if file has some errors in it. save the filename 
-            failed_files.append((f,e)) # use this to print out a table at the end
+         
     except Exception as e:
         print('\n------------------------')
-        print('\t__ERROR__ WHILE PROCESSING FILE!!! not while moving or executing statement. Error:{}'.format(e))
+        print('\t__UNKNOWN ERROR__ WHILE PROCESSING FILE!!! not while moving or executing statement. \nError:{}'.format(e))
         print('=========================\n\n\n')
-        failed_files.append((f,e))
+        error_list.append((f,'UNKNOWN ERROR',e))
 
 print('\n\n\n\n##FILES that were not successfully saved:\n=================')
-for f in failed_files:
-    print('file:',f[0],'error:',f[1])
-    
+prevfile = ''
+for f in error_list:
+    if f[0] == prevfile:
+        f[0] = '^'*len(prevfile)
+    else:
+        prevfile = f[0]
+    print('type:',f[1], '-> file:',f[0],'error:',f[2])
+
+
+print('\n\n\n\n##FILES that were successfully saved:\n=================')
+for f in saved_files:
+    print(f)    
 
 
