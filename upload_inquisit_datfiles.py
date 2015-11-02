@@ -20,15 +20,11 @@
 ##  this uses a DSN to connect to the database. update the name of the dsn below. FOR the WTP you shouldn't change it.
 ##  this uploads all files in this directory matching a filename pattern. update that pattern in rawfilename below
 ##########################
-dsn = 'wtp_data'
-tablename = 'data_rdmr_psap_t'
-rawfile_name = 'PSAP_rawdata*.iqdat'
-
 
 
 # YOU SHOULDN"T HAVE TO CHANGE BELOW THIS!!!
 #==========================================
-
+import argparse
 import glob # used to grab file names in directory
 import csv  # used to parse csv
 import pypyodbc as db # used to connect to database
@@ -36,28 +32,62 @@ import shutil # used  to move files to saved directory to mark them as saved
 import sys #used to log errors 
 import time # used to generate log names
 
-sys.stdout = open('diag/{}.txt'.format(time.asctime().replace(' ','_').replace(':',".")), 'w') # save the log
+#
+#   LOGS
+#       Redirect stdout to the logfile. as this is usually going to be run by a scheduled task. 
 
-con = db.connect(DSN=dsn)
+logname = time.asctime().replace(' ','_').replace(':',".") # name it after the current time
+sys.stdout = open('diag/{}.txt'.format(logname, 'w'))   # save the log
+
+
+#
+#   ARGUMENTS
+#
+
+argparsaser = argparse.ArgumentParser(description = 'Uploads inquisit datafiles to tables in wtp_data')
+p.add_argument('-t','--table', required=True)
+p.add_argument('-f','--file_pattern',required=True)
+p.add_argument('-d','--dsn',required=False, default='wtp_data')
+
+args = vars(p.parse_args())
+
+tablename = args['table']
+rawfile_name = args['file_pattern']
+dsn = args['dsn']
+
+print('PROVIDED ARGS: {}'.format(args))
+
+
+
+#
+#   DATABASE CONNECTION
+#
+
+con = db.connect(DSN=dsn) # connect to wtp_data
 cur = con.cursor()
 
 
 cur.execute('SELECT * FROM {}'.format(tablename))
 desc = cur.description
-for i,d in enumerate(desc):
-    print(i, d[0],'\t',d[1])
 
 colnames = ['`{}`'.format(d[0]) for d in desc]
 
 coltypes = [d[1] for d in desc] # get the column types to decide if we need to encapsulate them or not.
 
+
+#
+#   GET DATAFILES
+#
+
 datfiles = glob.glob(rawfile_name) # grab all files that need to be uploaded.
-print('found these datafiles. Trying to upload them.\n{}'.format(datfiles))
-
-failed_files = []
+print('Found these datafiles. Trying to upload them.\n{}'.format(datfiles))
 
 
+#
+#   Processing datafiles
+#
 
+failed_files = [] # container for files that were not uploaded successfully
 for f in datfiles:
     file_inserted_without_errors = True # if anything goes wrong flip this. but default to true 
     try:
@@ -66,6 +96,7 @@ for f in datfiles:
         r = csv.reader(fo, delimiter='\t')
         l = [line for line in r]
         fo.close() # close the file object. it's been read in already 
+        
         for i,line in enumerate(l[1:]): # iterate through each row
             sys.stdout.flush()
             # encapsulate strings with quotes
