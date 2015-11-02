@@ -49,6 +49,8 @@ argparser.add_argument('-t','--table', required=True)
 argparser.add_argument('-f','--file_pattern',required=True)
 argparser.add_argument('-p','--path_to_working_dir',required=True)
 argparser.add_argument('-d','--dsn',required=False, default='wtp_data')
+argparser.add_argument('--debug',required=False, default=None)
+
 
 args = vars(argparser.parse_args()) # get the arguments from argparse
 
@@ -56,7 +58,7 @@ tablename = args['table']
 rawfile_name = args['file_pattern']
 dsn = args['dsn']
 working_dir = args['path_to_working_dir']
-
+debug = args['debug']
 
 try:
     print('starting at:' + getcwd())
@@ -142,10 +144,11 @@ for f_i,f in enumerate(datfiles):
             # insert the row
             try:
                 cur.execute(statement)
+                cur.commit()
                 # if it did not succeed breaks out of try. and go to the next one. 
                 # else continue
                 # to save space in logfile don't print this
-                #print('inserted row {}/{} of file {} __successfully__'.format(i,len(l)-2,f))
+                if debug: print('inserted row {}/{} of file {} __successfully__. WITH STATEMENT: {}'.format(i,len(l)-2,f, statement))
 
             except Exception as e:
                 print('\n__error__ inserting row {}/{} into table {}. \terror: {}'.format(i,len(l)-2,f,e))
@@ -186,3 +189,5 @@ for f in saved_files:
     print(f)    
 
 
+cur.close()
+con.close()
