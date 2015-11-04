@@ -99,9 +99,8 @@ coltypes = [d[1] for d in desc] # get the column types to decide if we need to e
 #
 #   GET DATAFILES
 #
-
 datfiles = glob.glob(rawfile_name) # grab all files that need to be uploaded.
-print('Found these datafiles. Trying to upload them.\n{}'.format(datfiles))
+print('Found these datafiles. Trying to upload them.\n: {}'.format('\n: '.join(datfiles)))
 
 
 #
