@@ -124,7 +124,6 @@ for f_i,f in enumerate(datfiles):
         #   GO THROUGH ROWS
         #
 
-        errors_occured_in_file = [] # container to hold errors as they occur. We'll summarize them at the end of the file. 
             #   to be filled with tuples (row, error string)
         for i,line in enumerate(l[1:]): # iterate through each row
             sys.stdout.flush() # refresh the log.
@@ -154,7 +153,7 @@ for f_i,f in enumerate(datfiles):
                 print('\n__error__ inserting row {}/{} into table {}. \terror: {}'.format(i,len(l)-2,f,e))
                 print(statement + '\n')
                 file_inserted_without_errors = False # set flag to say it was completed with errors
-                errors_occured_in_file.append((f, 'ERROR WHILE INSERTING ROW' , e))
+                error_list.append((f, 'ERROR WHILE INSERTING ROW' , e))
         
         #
         # IF NO ERRORS MOVE TO SAVED DIRECTORY
@@ -174,20 +173,22 @@ for f_i,f in enumerate(datfiles):
         print('=========================\n\n\n')
         error_list.append((f,'UNKNOWN ERROR',e))
 
-print('\n\n\n\n##FILES that were not successfully saved:\n=================')
-prevfile = ''
-for f in error_list:
-    if f[0] == prevfile:
-        f[0] = '^'*len(prevfile)
-    else:
-        prevfile = f[0]
-    print('type:',f[1], '-> file:',f[0],'error:',f[2])
 
+if len(error_list) > 0:
+    print('\n\n\n\n##FILES that were __not__ successfully saved:\n=================')
+    prevfile = ''
+    for f in error_list:
+        if f[0] == prevfile:
+            f[0] = '^'*len(prevfile)
+        else:
+            prevfile = f[0]
+        print('type:',f[1], '-> file:',f[0],'error:',f[2])
 
-print('\n\n\n\n##FILES that were successfully saved:\n=================')
-for f in saved_files:
-    print(f)    
-
-
+if len(saved_files) > 0:
+    print('\n\n\n\n##FILES that were successfully saved:\n=================')
+    for f in saved_files:
+        print(f)    
+    
+f.close()
 cur.close()
 con.close()
