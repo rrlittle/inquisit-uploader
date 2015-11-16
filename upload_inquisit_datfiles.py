@@ -60,6 +60,12 @@ dsn = args['dsn']
 working_dir = args['path_to_working_dir']
 debug = args['debug']
 
+
+#
+#   Go to the working dir
+#
+
+
 try:
     print('starting at:' + getcwd())
     print( 'attempting to move to ' + working_dir)
@@ -75,7 +81,7 @@ except Exception as e:
 #       Redirect stdout to the logfile. as this is usually going to be run by a scheduled task. 
 
 logname = time.asctime().replace(' ','_').replace(':',".") # name it after the current time
-sys.stdout = open('diag/{}.txt'.format(logname), 'w')   # save the log
+sys.stdout = open('diag/upload_{}.txt'.format(logname), 'w')   # save the log
 
 
 print('PROVIDED ARGS: {}'.format(args))
